@@ -1,5 +1,6 @@
 # Python
 .venv/
+typings/
 __pycache__/
 *.pyc
 *.pyo
@@ -13,5 +14,7 @@ build/
 .DS_Store
 
 # Editors
-.vscode/
+.vscode/settings.json
+.vscode/launch.json
+.vscode/tasks.json
 .idea/

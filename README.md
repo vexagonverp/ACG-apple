@@ -14,6 +14,8 @@ source .venv/bin/activate      # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
+> `requirements.txt` includes `pybind11-stubgen` for generating type stubs (see [Type stubs](#type-stubs) below).
+
 ## Run
 
 ```bash
@@ -37,6 +39,16 @@ Saved: .out/apple_gold.ply
 
 The script opens an interactive 3D viewer automatically after saving via pyvista.
 
+## Type stubs
+
+pymeshlab is a C++ extension (pybind11) and ships without type stubs. Stubs are not committed — generate them locally after setup:
+
+```bash
+python -m pybind11_stubgen pymeshlab -o typings --ignore-invalid-expressions "m\..+"
+```
+
+The `--ignore-invalid-expressions` flag suppresses harmless warnings about numpy array types that pymeshlab aliases internally as `m`.
+
 ## Project structure
 
 ```
@@ -45,14 +57,27 @@ The script opens an interactive 3D viewer automatically after saving via pyvista
 │   ├── apple.obj          # input mesh
 │   ├── apple.mtl          # material definitions
 │   └── apple.mtl.bak      # original material backup
+├── typings/               # generated type stubs (gitignored, generate locally)
 ├── .out/                  # generated outputs (gitignored)
 ├── demo.py                # main demo script
 ├── requirements.txt       # Python dependencies
 └── README.md
 ```
 
+## VS Code
+
+A `.vscode/extensions.json` is included with recommended extensions:
+
+- **ms-python.python** — Python language support
+- **ms-python.vscode-pylance** — type checking and intellisense (picks up the `typings/` stubs automatically)
+- **ms-python.mypy-type-checker** — mypy integration
+- **ms-python.black-formatter** — code formatting
+
+VS Code will prompt you to install these when you open the project.
+
 ## Requirements
 
-- Python 3.10+
+- Python 3.13.x (see `.python-version`)
 - pymeshlab (installed via `requirements.txt`)
 - pyvista (installed via `requirements.txt`)
+- pybind11-stubgen (dev tool for regenerating type stubs)
