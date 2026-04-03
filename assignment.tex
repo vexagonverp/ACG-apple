@@ -1,0 +1,656 @@
+\documentclass[12pt]{extreport}
+\usepackage[utf8]{inputenc}
+
+% --- 1. FONTS & FORMATTING ---
+\usepackage{mathptmx}  % Times New Roman
+\usepackage[T1]{fontenc}
+\usepackage{scrextend}
+\changefontsizes{13pt}
+
+% --- 2. MARGINS ---
+\usepackage[left=2.5cm, top=2.0cm, right=1.5cm, bottom=2.5cm]{geometry}
+
+% --- 3. SPACING ---
+\usepackage{setspace}
+\onehalfspacing
+
+% --- 4. PACKAGES ---
+\usepackage{graphicx}
+\usepackage{titlesec}
+\usepackage{indentfirst}
+\usepackage{float}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{amsmath}
+
+% --- 5. HEADING FORMAT ---
+\titleformat{\chapter}[display]
+  {\normalfont\bfseries\centering}
+  {\MakeUppercase{\chaptertitlename}\ \thechapter}
+  {0pt}
+  {\MakeUppercase}
+\titlespacing*{\chapter}{0pt}{-20pt}{24pt}
+
+% --- 6. CODE LISTING STYLE ---
+\lstdefinestyle{cppstyle}{
+    language=C++,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{gray}\itshape,
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=8pt,
+    frame=single,
+    breaklines=true,
+    tabsize=4,
+    showstringspaces=false,
+    captionpos=b
+}
+\lstdefinestyle{pythonstyle}{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{gray}\itshape,
+    stringstyle=\color{red},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=8pt,
+    frame=single,
+    breaklines=true,
+    tabsize=4,
+    showstringspaces=false,
+    captionpos=b,
+    morekeywords={self,True,False,None,as,with,yield,lambda,assert}
+}
+\lstdefinestyle{bashstyle}{
+    language=bash,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue}\bfseries,
+    commentstyle=\color{gray}\itshape,
+    numbers=none,
+    frame=single,
+    breaklines=true,
+    tabsize=4,
+    showstringspaces=false,
+    captionpos=b,
+    backgroundcolor=\color{black!5}
+}
+
+\begin{document}
+
+% --- TITLE PAGE ---
+\begin{titlepage}
+    \centering
+    \vspace*{1cm}
+    \textbf{VIETNAM NATIONAL UNIVERSITY -- HO CHI MINH CITY}\\
+    \textbf{INTERNATIONAL UNIVERSITY}\\
+    \textbf{SCHOOL OF COMPUTER SCIENCE AND ENGINEERING}
+
+    \vspace{3cm}
+    \textbf{ADVANCED COMPUTER GRAPHIC}\\
+    \textbf{ASSIGNMENT 1}
+
+    \vspace{4cm}
+    \textbf{ASSIGNMENT REPORT}
+
+    \vspace{3cm}
+    \begin{flushleft}
+    \hspace{4cm} Student: Tran Bao Thanh, MITIU25214 \\
+    \end{flushleft}
+
+    \vfill
+    March 2026
+\end{titlepage}
+
+% --- TABLE OF CONTENTS ---
+\pagenumbering{roman}
+\setcounter{page}{2}
+\tableofcontents
+\newpage
+
+% ===========================================================================
+\pagenumbering{arabic}
+\chapter{MESHLAB INSTALLATION}
+% ===========================================================================
+
+\section{Steps}
+
+\begin{enumerate}
+    \item \textbf{Clone the repository with submodules:}
+\begin{lstlisting}[style=bashstyle]
+git clone --recursive https://github.com/cnr-isti-vclab/meshlab.git
+cd meshlab
+\end{lstlisting}
+    The \texttt{--recursive} flag pulls VCGLib and other dependencies tracked as Git submodules.
+
+    \item \textbf{Install all dependencies} using the provided setup script:
+\begin{lstlisting}[style=bashstyle]
+bash scripts/macOS/0_setup_env.sh
+\end{lstlisting}
+    This installs CMake, Ninja, Qt5, libomp, CGAL, Embree, TBB, and other required libraries via Homebrew.
+
+    \item \textbf{Build MeshLab:}
+\begin{lstlisting}[style=bashstyle]
+bash scripts/macOS/1_build.sh --use_brew_qt
+\end{lstlisting}
+    This configures CMake with Ninja in Release mode, compiles all targets, and installs binaries into \texttt{install/}.
+\end{enumerate}
+
+\section{Result}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{meshlab_launched.png}
+    \caption{MeshLab running after a successful build from source.}
+    \label{fig:meshlab_launched}
+\end{figure}
+
+% ===========================================================================
+\chapter{DELAUNAY TRIANGULATION PLUGIN}
+% ===========================================================================
+
+The plugin was built by following the structure of \texttt{filter\_create}, one of the simpler built-in filter plugins in MeshLab. It inherits from \texttt{FilterPlugin}, registers itself through the Qt plugin system, and implements the \texttt{applyFilter} method where the actual algorithm runs.
+
+The triangulation algorithm is Bowyer-Watson, which works by inserting points one at a time:
+\begin{enumerate}
+    \item Start with a large ``super-triangle'' that encloses all points.
+    \item For each new point: find triangles whose circumcircle contains it, remove them, and reconnect the point to the boundary edges of the hole.
+    \item Remove any triangle touching the super-triangle vertices.
+\end{enumerate}
+
+\section{File Structure}
+\begin{verbatim}
+src/meshlabplugins/filter_delaunay/
+    CMakeLists.txt         -- Build configuration
+    filter_delaunay.h      -- Class declaration
+    filter_delaunay.cpp    -- Algorithm + plugin glue
+\end{verbatim}
+
+The plugin was registered in \texttt{src/CMakeLists.txt}:
+\begin{lstlisting}[style=bashstyle]
+meshlabplugins/filter_create
+meshlabplugins/filter_delaunay    # <-- added
+meshlabplugins/filter_cubization
+\end{lstlisting}
+
+\section{Source Code: Data Structures}
+
+MeshLab plugins commonly define their own small structs for internal geometry work (for example, \texttt{TriangleUV} in the texture plugin or \texttt{HalfEdge} in the defragmentation plugin). There is no shared library for these, so each plugin creates what it needs. Our plugin defines two:
+
+\subsection{DEdge}
+Represents an undirected edge between two vertices, stored as a pair of integer indices. The \texttt{==} operator treats \texttt{\{a, b\}} and \texttt{\{b, a\}} as the same edge, since direction does not matter for our boundary checks.
+
+\begin{lstlisting}[style=cppstyle]
+struct DEdge {
+    int a, b;
+    bool operator==(const DEdge& o) const {
+        return (a == o.a && b == o.b)
+            || (a == o.b && b == o.a);
+    }
+};
+\end{lstlisting}
+
+\subsection{DTriangle}
+Represents a triangle as three vertex indices (\texttt{v[0]}, \texttt{v[1]}, \texttt{v[2]}), plus its precomputed circumcircle (center \texttt{cx}, \texttt{cy} and squared radius \texttt{r2}). Storing the circumcircle means we only compute it once per triangle, and every future containment check is just a quick distance comparison.
+
+\begin{lstlisting}[style=cppstyle]
+struct DTriangle {
+    int    v[3];      // vertex indices
+    double cx, cy;    // circumcenter
+    double r2;        // squared circumradius
+
+    bool computeCircumcircle(...);
+    bool inCircumcircle(const Point2D& p) const;
+    bool hasVertex(int i) const;
+    DEdge edge(int i) const;
+};
+\end{lstlisting}
+
+\section{Source Code: Helper Functions}
+
+\subsection{computeCircumcircle}
+Every triangle has a unique circle that passes through all three of its vertices, called the circumcircle. This function takes a triangle's three vertices and calculates the center and radius of that circle. We store the squared radius instead of the actual radius to avoid computing a square root, since we only ever need to compare distances. If the three points happen to be on the same line (collinear), no circle exists, so the function returns false.
+
+\begin{lstlisting}[style=cppstyle]
+bool computeCircumcircle(const std::vector<Point2D>& pts)
+{
+    double ax = pts[v[0]].x, ay = pts[v[0]].y;
+    double bx = pts[v[1]].x, by = pts[v[1]].y;
+    double ex = pts[v[2]].x, ey = pts[v[2]].y;
+
+    double D = 2.0 * (ax*(by-ey) + bx*(ey-ay) + ex*(ay-by));
+    if (std::abs(D) < 1e-10) return false;
+
+    double a2 = ax*ax + ay*ay;
+    double b2 = bx*bx + by*by;
+    double e2 = ex*ex + ey*ey;
+
+    cx = (a2*(by-ey) + b2*(ey-ay) + e2*(ay-by)) / D;
+    cy = (a2*(ex-bx) + b2*(ax-ex) + e2*(bx-ax)) / D;
+    r2 = (ax-cx)*(ax-cx) + (ay-cy)*(ay-cy);
+    return true;
+}
+\end{lstlisting}
+
+\subsection{inCircumcircle}
+This is the key test in the whole algorithm. Given a point, it checks whether that point falls inside a triangle's circumcircle. It does this by computing the squared distance from the point to the circumcenter, then comparing it against the squared circumradius. If the distance is smaller, the point is inside.
+
+\begin{lstlisting}[style=cppstyle]
+bool inCircumcircle(const Point2D& p) const
+{
+    double dx = p.x - cx, dy = p.y - cy;
+    return (dx*dx + dy*dy) < (r2 - 1e-10);
+}
+\end{lstlisting}
+
+\subsection{edge}
+A triangle has three edges. This function returns the i-th edge (where i is 0, 1, or 2) as a pair of vertex indices. It uses modular arithmetic so that edge 2 wraps around from vertex 2 back to vertex 0.
+
+\begin{lstlisting}[style=cppstyle]
+DEdge edge(int i) const { return {v[i], v[(i+1)%3]}; }
+\end{lstlisting}
+
+\section{Source Code: Main Algorithm}
+
+With those helpers in place, the main loop inserts each point one at a time. For every new point, it first scans all existing triangles and collects the ``bad'' ones (triangles whose circumcircle contains the new point). Then it looks at the edges of those bad triangles. If an edge is shared by two bad triangles, it sits in the interior of the hole and gets discarded. If an edge belongs to only one bad triangle, it sits on the boundary of the hole and we keep it. Finally, it creates new triangles by connecting the new point to each boundary edge.
+
+\begin{lstlisting}[style=cppstyle]
+for (int i = 0; i < n; i++) {
+
+    // Find triangles whose circumcircle contains the point
+    std::vector<int> bad;
+    for (int t = 0; t < tris.size(); t++)
+        if (tris[t].inCircumcircle(pts[i]))
+            bad.push_back(t);
+
+    // Collect boundary edges: for each edge of a bad triangle,
+    // check if any OTHER bad triangle also has that edge.
+    // If not, it's on the boundary.
+    std::vector<DEdge> boundary;
+    for (int bi : bad)
+        for (int e = 0; e < 3; e++) {
+            DEdge edge = tris[bi].edge(e);
+            bool shared = false;
+            for (int bj : bad)
+                if (bj != bi)
+                    for (int f = 0; f < 3; f++)
+                        if (edge == tris[bj].edge(f))
+                            shared = true;
+            if (!shared)
+                boundary.push_back(edge);
+        }
+
+    // Remove bad triangles, then connect point to boundary
+    for (const DEdge& e : boundary) {
+        DTriangle nt;
+        nt.v[0] = e.a;  nt.v[1] = e.b;  nt.v[2] = i;
+        nt.computeCircumcircle(pts);
+        tris.push_back(nt);
+    }
+}
+\end{lstlisting}
+
+The last part of the loop builds the new triangles. For each boundary edge, it creates a triangle using that edge's two vertices plus the newly inserted point (index \texttt{i}). It then computes the circumcircle for the new triangle so it's ready for future containment checks.
+
+After all points have been inserted, any triangle still connected to the super-triangle gets removed, since those were just temporary scaffolding.
+
+% ===========================================================================
+\chapter{TESTING AND RESULTS}
+% ===========================================================================
+
+\section{Test Input}
+A set of \textbf{10 points} was prepared in PLY format (\texttt{test\_10points.ply}):
+
+\begin{table}[H]
+\centering
+\begin{tabular}{|c|c|c|}
+\hline
+\textbf{X} & \textbf{Y} & \textbf{Z} \\
+\hline
+1.0 & 1.0 & 0.0 \\
+5.0 & 0.5 & 0.0 \\
+9.0 & 1.0 & 0.0 \\
+0.5 & 4.5 & 0.0 \\
+3.5 & 3.0 & 0.0 \\
+6.5 & 3.5 & 0.0 \\
+9.5 & 5.0 & 0.0 \\
+2.0 & 7.0 & 0.0 \\
+5.0 & 6.5 & 0.0 \\
+8.0 & 7.5 & 0.0 \\
+\hline
+\end{tabular}
+\caption{The 10 test points used as input.}
+\label{tab:test_points}
+\end{table}
+
+\section{Running the Plugin}
+\begin{enumerate}
+    \item Open MeshLab (compiled from source).
+    \item Load \texttt{test\_10points.ply} via \textbf{File $\rightarrow$ Import Mesh}.
+    \item Go to \textbf{Filters $\rightarrow$ Remeshing, Simplification and Reconstruction}.
+    \item Select \textbf{``Delaunay Triangulation TranBaoThanh''} and click \textbf{Apply}.
+\end{enumerate}
+
+\section{Plugin Loaded in MeshLab}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{filter_menu.png}
+    \caption{The plugin appears under Filters $\rightarrow$ Remeshing, Simplification and Reconstruction.}
+    \label{fig:filter_menu}
+\end{figure}
+
+\section{Results}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{input_points.png}
+    \caption{Input: 10 points loaded from \texttt{test\_10points.ply}.}
+    \label{fig:input_points}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{delaunay_result.png}
+    \caption{Output: Delaunay triangulation of the 10 points.}
+    \label{fig:delaunay_result}
+\end{figure}
+
+% ===========================================================================
+\chapter{PYOPENGL INSTALLATION AND LAB 3 EXERCISES}
+% ===========================================================================
+
+The lab was originally in Java but I used Python instead since the assignment said to use PyOpenGL. Pygame handles the window and mouse events.
+
+\section{PyOpenGL Installation}
+
+I set up a virtual environment in VS Code and installed everything through pip:
+
+\begin{lstlisting}[style=bashstyle]
+python -m venv .venv
+source .venv/bin/activate
+pip install PyOpenGL PyOpenGL_accelerate pygame
+\end{lstlisting}
+
+\begin{lstlisting}[style=bashstyle]
+$ python -c "import OpenGL; print(OpenGL.__version__)"
+3.1.10
+$ python -c "import pygame; print(pygame.ver)"
+2.6.1
+\end{lstlisting}
+
+\section{Exercise 1: Draw All Shapes}
+
+Python version of the Java \texttt{DrawShapes} program. Press 1--8 to pick a shape, click and drag to draw. OpenGL doesn't have built-in shapes like Java2D so everything is made from vertices.
+
+Eight shapes: Rectangle, RoundRectangle, Ellipse, Arc, Line, QuadCurve, CubicCurve, Polygon. Q/Esc quits (``System $\rightarrow$ Close'').
+
+Each finished shape goes into a list. The main loop redraws them all every frame with \texttt{draw\_shape()}. While dragging, \texttt{draw\_preview()} shows a gray outline of what you're about to draw.
+
+\subsection{Rendering: draw\_shape()}
+
+Takes the shape type and its saved data, picks the right OpenGL calls. Rectangle and Line are just vertices. RoundRectangle goes to \texttt{gl\_round\_rect()} for corner arcs. Ellipse and Arc both use \texttt{gl\_ellipse()}, Arc limited to 0--180. Curves call \texttt{bezier\_quad()} or \texttt{bezier\_cubic()}.
+
+\begin{lstlisting}[style=pythonstyle]
+def draw_shape(stype, data):
+    glColor3f(0.0, 0.0, 0.0)
+    if stype == RECT:
+        x1, y1, x2, y2 = data
+        glBegin(GL_LINE_LOOP)
+        glVertex2f(x1, y1);  glVertex2f(x2, y1)
+        glVertex2f(x2, y2);  glVertex2f(x1, y2)
+        glEnd()
+    elif stype == RRECT:
+        gl_round_rect(*data)       # quarter-circle arcs at corners
+    elif stype == ELLIPSE:
+        x1, y1, x2, y2 = data
+        gl_ellipse((x1+x2)/2, (y1+y2)/2,
+                   abs(x2-x1)/2, abs(y2-y1)/2)
+    elif stype == ARC:
+        x1, y1, x2, y2 = data
+        gl_ellipse((x1+x2)/2, (y1+y2)/2,
+                   abs(x2-x1)/2, abs(y2-y1)/2,
+                   start_deg=0, end_deg=180)   # top half only
+    elif stype == LINE:
+        glBegin(GL_LINES)
+        glVertex2f(data[0], data[1])
+        glVertex2f(data[2], data[3])
+        glEnd()
+    elif stype == QUAD:
+        bezier_quad(data[0], data[1], data[2])
+    elif stype == CUBIC:
+        bezier_cubic(data[0], data[1], data[2], data[3])
+    elif stype == POLY:
+        glBegin(GL_LINE_LOOP)
+        for px, py in data:
+            glVertex2f(px, py)
+        glEnd()
+\end{lstlisting}
+
+\subsection{Helper Functions}
+
+\texttt{gl\_round\_rect()} traces a 90 degree arc at each corner with 16 \texttt{cos}/\texttt{sin} steps. \texttt{r} controls roundness.
+
+\texttt{gl\_ellipse()} goes from \texttt{start\_deg} to \texttt{end\_deg} in 72 steps, computing each point with \texttt{cos} and \texttt{sin} stretched by \texttt{rx} and \texttt{ry}. Full ellipse is 0--360, arc is 0--180.
+
+\texttt{bezier\_cubic()} walks \texttt{t} from 0 to 1 in 64 steps. At each step the four control points get blended with weights depending on \texttt{t}. Connected with \texttt{GL\_LINE\_STRIP} it looks smooth. \texttt{bezier\_quad()} is the same with three points.
+
+\begin{lstlisting}[style=pythonstyle]
+def gl_ellipse(cx, cy, rx, ry, start_deg=0, end_deg=360, segs=72):
+    glBegin(GL_LINE_STRIP)
+    for i in range(segs + 1):
+        a = math.radians(start_deg + (end_deg - start_deg) * i / segs)
+        glVertex2f(cx + rx * math.cos(a), cy + ry * math.sin(a))
+    glEnd()
+
+def bezier_cubic(p0, p1, p2, p3, segs=64):
+    glBegin(GL_LINE_STRIP)
+    for i in range(segs + 1):
+        t = i / segs;  u = 1 - t
+        x = u**3*p0[0] + 3*u**2*t*p1[0] + 3*u*t**2*p2[0] + t**3*p3[0]
+        y = u**3*p0[1] + 3*u**2*t*p1[1] + 3*u*t**2*p2[1] + t**3*p3[1]
+        glVertex2f(x, y)
+    glEnd()
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{lab3_ex1_result.png}
+    \caption{All eight shapes drawn on the PyOpenGL canvas.}
+    \label{fig:lab3_ex1}
+\end{figure}
+
+\section{Exercise 2: Affine Transforms}
+
+Python version of the Java \texttt{Transformation} program. Rectangle in the middle with axes. Press T/R/S/H/F to pick a transform, drag mouse to apply. Letting go saves the new position.
+
+The rectangle is four (x, y) points. \texttt{apply\_transform()} takes the points and mouse offset \texttt{(dx, dy)}, returns new points.
+
+\begin{itemize}
+    \item \textbf{Translation}: adds \texttt{dx}/\texttt{dy} to every point.
+    \item \textbf{Rotation}: angle difference between mouse at press (\texttt{a1}) and now (\texttt{a2}). Each point gets 2D rotation with cos/sin.
+    \item \textbf{Scaling}: ratio of how far mouse is from centre now vs. at press. Separate for x and y.
+    \item \textbf{Shearing}: from the lab hint. \texttt{shx} pushes x by \texttt{shx * y}, and \texttt{shy} pushes y by \texttt{shy * x}. Makes the shape lean.
+    \item \textbf{Reflection}: flips x or y, toggles direction each press.
+\end{itemize}
+
+\begin{lstlisting}[style=pythonstyle]
+def apply_transform(pts, dx, dy):
+    if mode == TRANSLATION:
+        return [(px + dx, py + dy) for px, py in pts]
+
+    if mode == ROTATION:
+        # angle of mouse at press vs. angle of mouse now
+        a1 = math.atan2(press_pt[1] - CY, press_pt[0] - CX)
+        a2 = math.atan2((press_pt[1]+dy) - CY, (press_pt[0]+dx) - CX)
+        angle = a2 - a1
+        cos_a, sin_a = math.cos(angle), math.sin(angle)
+        return [(px*cos_a - py*sin_a, px*sin_a + py*cos_a)
+                for px, py in pts]
+
+    if mode == SCALING:
+        sx = abs((press_pt[0] + dx - CX) / (press_pt[0] - CX))
+        sy = abs((press_pt[1] + dy - CY) / (press_pt[1] - CY))
+        return [(px * sx, py * sy) for px, py in pts]
+
+    if mode == SHEARING:
+        # from the lab hint
+        shx = ((press_pt[0]+dx - CX) / (press_pt[0] - CX)) - 1
+        shy = ((press_pt[1]+dy - CY) / (press_pt[1] - CY)) - 1
+        return [(px + shx*py, py + shy*px) for px, py in pts]
+
+    if mode == REFLECTION:
+        # toggle x/y reflection on each press
+        return [(-px, py) if reflect_axis == 0 else (px, -py)
+                for px, py in pts]
+    return pts
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{lab3_ex2_result.png}
+    \caption{Rectangle after shearing and reflection.}
+    \label{fig:lab3_ex2}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{lab3_ex2_result2.png}
+    \caption{Rectangle after scaling and rotation.}
+    \label{fig:lab3_ex2b}
+\end{figure}
+
+\section{Exercise 3: Animated Clock}
+
+The Java version has tick marks for hours. This replaces them with numbers 1--12 like the exercise asked.
+
+Numbers go on a circle inside the face. 12 is at 90 degrees (top in math), each hour 30 degrees apart. Number \texttt{i} sits at \texttt{90 - i*30}. \texttt{cos}/\texttt{sin} give the position. Text drawn with GLUT bitmap fonts.
+
+Hands use \texttt{time.localtime()} every frame. Hour hand: \texttt{(hour + min/60) * 30} so it moves smooth. Minute: \texttt{min * 6}. Second: \texttt{sec * 6}. Clock angles go clockwise from 12 but math goes counterclockwise from the right, so \texttt{draw\_hand()} does \texttt{90 - angle\_deg} to convert.
+
+\begin{lstlisting}[style=pythonstyle]
+def draw_clock_face():
+    # ... draw filled circle, border ...
+
+    # numbers 1-12 around the face
+    for i in range(1, 13):
+        angle = math.radians(90 - i * 30)
+        nx = CX + (RADIUS - 30) * math.cos(angle)
+        ny = CY - (RADIUS - 30) * math.sin(angle)
+        draw_text_gl(nx - 5*len(str(i)), ny + 5, str(i))
+
+# in the main loop, every frame:
+t = time.localtime()
+hour_angle = (t.tm_hour % 12 + t.tm_min / 60.0) * 30
+min_angle  = t.tm_min * 6
+sec_angle  = t.tm_sec * 6
+
+draw_clock_face()
+draw_hand(hour_angle, 80, width=5.0)   # short, thick
+draw_hand(min_angle,  120, width=3.0)  # long, medium
+draw_hand(sec_angle,  130, width=1.5)  # longest, thin
+
+def draw_hand(angle_deg, length, width=3.0):
+    # 0 deg = 12 o'clock; convert to math angle (90 deg = up)
+    a = math.radians(90 - angle_deg)
+    glLineWidth(width)
+    glBegin(GL_LINES)
+    glVertex2f(CX, CY)
+    glVertex2f(CX + length*math.cos(a), CY - length*math.sin(a))
+    glEnd()
+\end{lstlisting}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{lab3_ex3_result.png}
+    \caption{Animated clock with numbers 1--12.}
+    \label{fig:lab3_ex3}
+\end{figure}
+
+\section{Homework 1: Combined Program}
+
+Puts Exercise 1 and 2 together. Tab switches between drawing and transforming. Three menus: Choose Objects, Transforms, System.
+
+The big difference from Exercise 2: transforms apply to all shapes on the canvas, not just one rectangle.
+
+Different shapes store data differently (corners vs. point lists vs. control points), so \texttt{transform\_shape\_data()} checks the type and transforms the right points. Each point goes through \texttt{transform\_point()}, same math as Exercise 2.
+
+\begin{lstlisting}[style=pythonstyle]
+def transform_point(px, py, dx, dy):
+    if tmode == TRANSLATION:
+        return (px + dx, py + dy)
+    if tmode == ROTATION:
+        a1 = math.atan2(press_pt[1] - CY, press_pt[0] - CX)
+        a2 = math.atan2((press_pt[1]+dy) - CY, (press_pt[0]+dx) - CX)
+        angle = a2 - a1
+        c, s = math.cos(angle), math.sin(angle)
+        rx, ry = px - CX, py - CY
+        return (CX + rx*c - ry*s, CY + rx*s + ry*c)
+    if tmode == SCALING:
+        sx = abs((press_pt[0]+dx - CX) / (press_pt[0] - CX))
+        sy = abs((press_pt[1]+dy - CY) / (press_pt[1] - CY))
+        return (CX + (px-CX)*sx, CY + (py-CY)*sy)
+    if tmode == SHEARING:
+        shx = ((press_pt[0]+dx - CX) / (press_pt[0] - CX)) - 1
+        shy = ((press_pt[1]+dy - CY) / (press_pt[1] - CY)) - 1
+        rx, ry = px - CX, py - CY
+        return (CX + rx + shx*ry, CY + ry + shy*rx)
+    if tmode == REFLECTION:
+        return (2*CX - px, py) if reflect_axis == 0 else (px, 2*CY - py)
+    return (px, py)
+
+def transform_shape_data(stype, data, dx, dy):
+    if stype in (RECT, RRECT, ELLIPSE, ARC, LINE):
+        x1, y1, x2, y2 = data
+        return (*transform_point(x1,y1,dx,dy), *transform_point(x2,y2,dx,dy))
+    elif stype in (QUAD, CUBIC):
+        return tuple(transform_point(px,py,dx,dy) for px,py in data)
+    elif stype == POLY:
+        return [transform_point(px,py,dx,dy) for px,py in data]
+\end{lstlisting}
+
+On release, every shape gets replaced with the new position. While dragging, old shapes show faded gray and the preview is drawn in black.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{lab3_hw1_result.png}
+    \caption{Combined program: shapes drawn in draw mode, then rotated in transform mode.}
+    \label{fig:lab3_hw1}
+\end{figure}
+
+\section{Homework 2: Animated Car}
+
+Car moves across the screen, wheels spin. Everything is black outlines on white, no fill colors.
+
+The car is two rectangles (body and cabin) drawn with \texttt{GL\_LINE\_LOOP}. Each wheel is a circle with four spokes. The spokes rotate because \texttt{wheel\_angle} gets added to each spoke's angle every frame. Ground is just a horizontal line.
+
+\begin{lstlisting}[style=pythonstyle]
+def draw_wheel(cx, cy, r, angle):
+    draw_circle(cx, cy, r)         # outline circle
+    for i in range(4):             # 4 spokes
+        a = angle + math.pi / 2 * i
+        glBegin(GL_LINES)
+        glVertex2f(cx, cy)
+        glVertex2f(cx + r*math.cos(a), cy + r*math.sin(a))
+        glEnd()
+
+def draw_car(x, wa):
+    body_y = GROUND_Y - WHEEL_R - 40
+    draw_rect(x, body_y, 180, 40)           # body
+    draw_rect(x + 40, body_y - 30, 100, 30) # cabin
+    draw_wheel(x + 40,  GROUND_Y - WHEEL_R, WHEEL_R, wa)
+    draw_wheel(x + 140, GROUND_Y - WHEEL_R, WHEEL_R, wa)
+\end{lstlisting}
+
+Each frame: \texttt{car\_x} increases by \texttt{CAR\_SPEED} (wraps when off screen), \texttt{wheel\_angle} decreases by \texttt{CAR\_SPEED / WHEEL\_R} so wheel spin matches distance.
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.85\textwidth]{lab3_hw2_result.png}
+    \caption{Animated car driving across the screen with rotating wheels.}
+    \label{fig:lab3_hw2}
+\end{figure}
+
+\end{document}
