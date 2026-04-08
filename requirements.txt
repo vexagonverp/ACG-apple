@@ -2,3 +2,4 @@ pymeshlab==2025.7.post1
 pyvista
 pybind11-stubgen
 opencv-python
+vtk
